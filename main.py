@@ -1,43 +1,46 @@
 from flask import Flask
-from flask_graphql import GraphQLView
-from flask_sqlalchemy import SQLAlchemy
 import graphene
+from flask_graphql import GraphQLView
 from graphene_sqlalchemy import SQLAlchemyObjectType, SQLAlchemyConnectionField
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://your_username:your_password@localhost/your_database'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:password@localhost/db_name'
 db = SQLAlchemy(app)
 
-# Adding Models
+# Models
 class Department(db.Model):
     __tablename__ = 'department'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
+    users = db.relationship('User', back_populates='department')
 
 class User(db.Model):
     __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     department_id = db.Column(db.Integer, db.ForeignKey('department.id'), nullable=False)
-    department = db.relationship('Department', backref=db.backref('users', lazy=True))
+    department = db.relationship('Department', back_populates='users')
 
 # Schemas
-class DepartmentType(graphene.ObjectType):
-    id = graphene.Int()
-    name = graphene.String()
+class DepartmentType(SQLAlchemyObjectType):
+    class Meta:
+        model = Department
+        interfaces = (graphene.relay.Node,)
 
-class UserType(graphene.ObjectType):
-    id = graphene.Int()
-    name = graphene.String()
-    department = graphene.Field(DepartmentType)
+
+class UserType(SQLAlchemyObjectType):
+    class Meta:
+        model = User
+        interfaces = (graphene.relay.Node,)
 
 # Querying
 class Query(graphene.ObjectType):
     department = graphene.Field(DepartmentType, id=graphene.Int())
-    all_departments = graphene.List(DepartmentType)
+    all_departments = SQLAlchemyConnectionField(DepartmentType)
 
     user = graphene.Field(UserType, id=graphene.Int())
-    all_users = graphene.List(UserType)
+    all_users = SQLAlchemyConnectionField(UserType)
 
     def resolve_department(self, info, id):
         return Department.query.get(id)
